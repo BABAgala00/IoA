@@ -1,0 +1,36 @@
+This query detects if a WebDav communication is initiated to an external address, and at that time frame, if a .url file is created on the host.
+Correlating this chain of events, we detected a lab simulation of a malicious .url file using WebDav to connect to the attacker's control address. 
+Stealth Falcon uses spear-phishing emails as an infection method, often including links or attachments that utilize WebDAV and LOLBins to deploy malware.
+References:
+https://research.checkpoint.com/2025/stealth-falcon-zero-day/
+
+let WebDav_pipeEvent = (DeviceEvents
+| where Timestamp > ago(1h)
+| where ActionType has "NamedPipeEvent"
+| where  InitiatingProcessFileName has "rundll32"
+| where InitiatingProcessCommandLine has_all ('davclnt.dll','DavSetCookie'));
+let External_Netcon_svchost_pipeEvent = (DeviceNetworkEvents
+| where Timestamp > ago(1h)
+| join WebDav_pipeEvent on DeviceName, $left.InitiatingProcessFileName == $right.InitiatingProcessParentFileName, $left.InitiatingProcessId == $right.InitiatingProcessParentId
+| where not( ipv4_is_private( RemoteIP) or RemoteIP == '127.0.0.1')
+| project Timestamp,DeviceName,ActionType,LocalIP,RemoteIP,RemoteUrl,RemotePort,Protocol,InitiatingProcessParentFileName,InitiatingProcessParentId,InitiatingProcessFileName,InitiatingProcessId,InitiatingProcessCommandLine,AccountName,
+WebDavcmdline=InitiatingProcessCommandLine1,AdditionalFields1);
+// Check if the .url file was created on the machine around the time of the external WebDav communication
+let url_file_created = (DeviceFileEvents
+| where Timestamp > ago(1h)
+| where FileName endswith ".url");
+External_Netcon_svchost_pipeEvent | join url_file_created on DeviceName
+| where not( isempty( RemoteUrl))
+
+################################################
+
+iediagcmd.exe is a diagnostic utility for Internet Explorer, primarily used to collect troubleshooting information. 
+It is uncommon in modern environments due to the declining relevance and deprecation of Internet Explorer. 
+Notably, iediagcmd.exe was recently leveraged in cyberattacks by the Stealth Falcon group, as detailed in a 2025 report by Check Point Research, highlighting its potential misuse in advanced persistent threat (APT) campaigns. 
+References:
+https://research.checkpoint.com/2025/stealth-falcon-zero-day/
+
+DeviceProcessEvents
+| where FileName has "iediagcmd"
+| project-reorder Timestamp,InitiatingProcessParentFileName,InitiatingProcessCommandLine
+
