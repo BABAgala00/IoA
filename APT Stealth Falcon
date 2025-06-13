@@ -9,6 +9,7 @@ let WebDav_pipeEvent = (DeviceEvents
 | where ActionType has "NamedPipeEvent"
 | where  InitiatingProcessFileName has "rundll32"
 | where InitiatingProcessCommandLine has_all ('davclnt.dll','DavSetCookie'));
+// The communication done by svchost (not rundll)
 let External_Netcon_svchost_pipeEvent = (DeviceNetworkEvents
 | where Timestamp > ago(1h)
 | join WebDav_pipeEvent on DeviceName, $left.InitiatingProcessFileName == $right.InitiatingProcessParentFileName, $left.InitiatingProcessId == $right.InitiatingProcessParentId
