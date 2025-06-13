@@ -21,7 +21,6 @@ let url_file_created = (DeviceFileEvents
 | where Timestamp > ago(1h)
 | where FileName endswith ".url");
 External_Netcon_svchost_pipeEvent | join url_file_created on DeviceName
-| where not( isempty( RemoteUrl))
 
 ################################################
 
