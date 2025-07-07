@@ -1,0 +1,10 @@
+// https://www.bleepingcomputer.com/news/security/oneclik-attacks-use-microsoft-clickonce-and-aws-to-target-energy-sector/
+
+let dfsvc_sus_childproc = (DeviceProcessEvents
+| where InitiatingProcessFileName has "dfsvc.exe"
+| distinct FileName,SHA1
+| invoke FileProfile(SHA1,1000)
+// Change prevalence by your own adjustments
+| where GlobalPrevalence <= 5
+| where not( SignatureState has "SignedValid" and IsCertificateValid == 1));
+dfsvc_sus_childproc | join DeviceProcessEvents on $left.FileName == $right.FileName, $left.SHA1 == $right.SHA1
