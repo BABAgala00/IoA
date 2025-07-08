@@ -1,0 +1,58 @@
+// This query detects remote file execution via WebDAV remote drive.
+
+
+let APIPA_regex = @"(169\.254\.(([0,1]?[0-9]{1,2})|(2[0-4][0-9])|(25[0-5])))\.([0,1]?[0-9]{1,2}|2[0-4][0-9]|25[0-5])$";
+let InternalIP_regex = @"(^10\.((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){2}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)|(^172\.(1[6-9]|2[0-9]|3[0-1])\.((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.)(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)|(^192\.168\.((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.)(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)";
+// Search for WebDaV activity
+let WebDav_pipeEvent = (DeviceEvents
+| where Timestamp > ago(1h)
+| where ActionType has "NamedPipeEvent"
+| where  InitiatingProcessFileName has "rundll32"
+| where InitiatingProcessCommandLine has_all ('davclnt.dll','DavSetCookie')
+| extend RemoteHost = parse_command_line(InitiatingProcessCommandLine,"windows")
+| extend RemoteHost = tostring(RemoteHost[2])
+);
+// WebDaV external network connection
+let External_Netcon_svchost_pipeEvent = (DeviceNetworkEvents
+| where Timestamp > ago(1h)
+| join WebDav_pipeEvent on DeviceName, $left.InitiatingProcessFileName == $right.InitiatingProcessParentFileName, $left.InitiatingProcessId == $right.InitiatingProcessParentId
+| where not( ipv4_is_private( RemoteIP) or RemoteIP == '127.0.0.1')
+| project Timestamp,DeviceName,ActionType,LocalIP,RemoteIP,RemoteUrl,RemotePort,Protocol,InitiatingProcessParentFileName,InitiatingProcessParentId,InitiatingProcessFileName,InitiatingProcessId,InitiatingProcessCommandLine,AccountName,
+WebDavRemoteHost1=InitiatingProcessCommandLine1,AdditionalFields1,RemoteHost);
+// Filter for remote file execution via WebDav
+let WebDav_susFileExtension = (DeviceProcessEvents
+| where InitiatingProcessFileName has "svchost.exe" and FileName has "rundll32.exe"
+| where ProcessCommandLine contains @'davclnt.dll,DavSetCookie'
+| where ProcessCommandLine contains "http"
+| where ProcessCommandLine endswith ".ps1" 
+   or ProcessCommandLine endswith ".cmd" 
+   or ProcessCommandLine endswith ".bat" 
+   or ProcessCommandLine endswith ".js" 
+   or ProcessCommandLine endswith ".wsf" 
+   or ProcessCommandLine endswith ".vbs" 
+   or ProcessCommandLine endswith ".exe" 
+   or ProcessCommandLine endswith ".com" 
+   or ProcessCommandLine endswith ".msi" 
+   or ProcessCommandLine endswith ".msc" 
+   or ProcessCommandLine endswith ".hta" 
+   or ProcessCommandLine endswith ".scr" 
+   or ProcessCommandLine endswith ".pif" 
+   or ProcessCommandLine endswith ".reg" 
+   or ProcessCommandLine endswith ".jar" 
+   or ProcessCommandLine endswith ".py" 
+   or ProcessCommandLine endswith ".php" 
+   or ProcessCommandLine endswith ".psm1" 
+   or ProcessCommandLine endswith ".psd1" 
+   or ProcessCommandLine endswith ".lnk" 
+   or ProcessCommandLine endswith ".dll" 
+   or ProcessCommandLine endswith ".vbe" 
+   or ProcessCommandLine endswith ".cpl"
+| extend RemoteHost1 = parse_command_line(ProcessCommandLine,"windows")
+| extend RemoteHost1 = tostring(RemoteHost1[2])
+);
+External_Netcon_svchost_pipeEvent | join WebDav_susFileExtension on DeviceName, $left.RemoteHost == $right.RemoteHost1
+| project-reorder RemoteHost,ProcessCommandLine
+| where RemoteHost contains "." // QFDN accurate external connection
+| where not(RemoteHost matches regex APIPA_regex or RemoteHost matches regex InternalIP_regex) // exclude internal IPs WebDav hosts
+
+
