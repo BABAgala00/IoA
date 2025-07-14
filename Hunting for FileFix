@@ -1,0 +1,6 @@
+// References: https://thedfirreport.com/2025/07/14/kongtuke-filefix-leads-to-new-interlock-rat-variant/
+let Browsers = pack_array("chrome.exe","edge.exe","firefox.exe","iexplorer.exe");
+let executers = pack_array("rundll32","cscript","wscript","cmd.exe","powershell.exe","mshta");
+DeviceProcessEvents
+| where InitiatingProcessFileName has_any (Browsers) 
+| where FileName has_any (executers)
