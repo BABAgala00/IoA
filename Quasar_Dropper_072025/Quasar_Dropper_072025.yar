@@ -2,7 +2,7 @@ rule Quasar_Dropper_072025
 {
     meta:
         description = "Detects Quasar Dropper 072025 based on specific string patterns"
-        author = "BABAgalae"
+        author = "BABAgala"
         date = "2025-07-22"
 
     strings:
